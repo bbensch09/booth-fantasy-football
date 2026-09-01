@@ -2,15 +2,23 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
 
 export default async function Home() {
-  const supabase = await createClient();
-  const { data } = await supabase.auth.getUser();
-  if (!data.user) redirect("/login");
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    redirect("/draft");
+  }
 
-  const { data: prefs } = await supabase
-    .from("preferences")
-    .select("onboarded")
-    .eq("user_id", data.user.id)
-    .maybeSingle();
+  try {
+    const supabase = await createClient();
+    const { data } = await supabase.auth.getUser();
+    if (!data.user) redirect("/login");
 
-  redirect(prefs?.onboarded ? "/dashboard" : "/onboarding");
+    const { data: prefs } = await supabase
+      .from("preferences")
+      .select("onboarded")
+      .eq("user_id", data.user.id)
+      .maybeSingle();
+
+    redirect(prefs?.onboarded ? "/dashboard" : "/onboarding");
+  } catch {
+    redirect("/draft");
+  }
 }
