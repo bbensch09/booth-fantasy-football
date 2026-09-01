@@ -32,7 +32,7 @@ export default function DraftRoom({
   session,
   initialPicks
 }: {
-  userId: string;
+  userId: string | null;
   prefs: Prefs;
   players: PlayerRow[];
   session: Session | null;
@@ -97,13 +97,23 @@ export default function DraftRoom({
   }, [board, filter, query]);
 
   async function startDraft() {
-    const supabase = createClient();
-    const { data, error } = await supabase
-      .from("draft_sessions")
-      .insert({ ...setup, user_id: userId, slots: DEFAULT_SLOTS })
-      .select()
-      .single();
-    if (!error && data) setSess(data as Session);
+    if (userId) {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("draft_sessions")
+        .insert({ ...setup, user_id: userId, slots: DEFAULT_SLOTS })
+        .select()
+        .single();
+      if (!error && data) setSess(data as Session);
+    } else {
+      // Guest mode: store session in localStorage only.
+      const id = crypto.randomUUID();
+      const newSess: Session = { id, ...setup, slots: DEFAULT_SLOTS };
+      try {
+        localStorage.setItem(`booth_session_${id}`, JSON.stringify(newSess));
+      } catch {}
+      setSess(newSess);
+    }
   }
 
   async function record(playerId: string, isMine: boolean) {
@@ -117,16 +127,20 @@ export default function DraftRoom({
     setPicks((old) => [...old, pick]);
     setTray([]);
     setVerdict(null);
-    const supabase = createClient();
-    await supabase.from("draft_picks").insert({ ...pick, session_id: sess.id });
+    if (userId) {
+      const supabase = createClient();
+      await supabase.from("draft_picks").insert({ ...pick, session_id: sess.id });
+    }
   }
 
   async function undo() {
     if (!sess || !picks.length) return;
     const last = picks[picks.length - 1];
     setPicks((old) => old.slice(0, -1));
-    const supabase = createClient();
-    await supabase.from("draft_picks").delete().eq("session_id", sess.id).eq("overall", last.overall);
+    if (userId) {
+      const supabase = createClient();
+      await supabase.from("draft_picks").delete().eq("session_id", sess.id).eq("overall", last.overall);
+    }
   }
 
   function toggleTray(id: string) {
