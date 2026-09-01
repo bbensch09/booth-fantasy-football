@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --paper: #f1f3ef;
+  --surface: #fbfcfa;
+  --ink: #191d19;
+  --muted: #6b7268;
+  --rule: #d5dad2;
+  --crimson: #a8232c;
+  --gold: #c9a227;
+  --teal: #2f6f6a;
+}
+
+html,
+body {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+body {
+  font-feature-settings: "tnum" 1, "cv05" 1;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* numbers must not jitter when the board re-sorts */
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.rule-t {
+  border-top: 1px solid var(--rule);
+}
+
+/* the signature element: a tier cliff drawn across the board */
+.cliff {
+  position: relative;
+}
+.cliff::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--crimson) 0 10px,
+    transparent 10px 16px
+  );
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
