@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase-client";
 
-export default function Login() {
+function LoginForm() {
   const [email, setEmail] = useState("");
   const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [message, setMessage] = useState("");
+  const callbackError = useSearchParams().get("error");
 
   async function signIn() {
     setState("sending");
@@ -18,6 +20,9 @@ export default function Login() {
     if (error) {
       setState("error");
       setMessage(error.message);
+      {callbackError && state === "idle" && (
+          <p className="mt-3 text-sm text-crimson">That link did not sign you in: {callbackError}</p>
+        )}
     } else {
       setState("sent");
     }
@@ -59,5 +64,12 @@ export default function Login() {
         {state === "error" && <p className="mt-3 text-sm text-crimson">{message}</p>}
       </div>
     </div>
+  );
+}
+export default function Login() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
   );
 }
