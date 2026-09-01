@@ -20,9 +20,6 @@ function LoginForm() {
     if (error) {
       setState("error");
       setMessage(error.message);
-      {callbackError && state === "idle" && (
-          <p className="mt-3 text-sm text-crimson">That link did not sign you in: {callbackError}</p>
-        )}
     } else {
       setState("sent");
     }
@@ -58,6 +55,9 @@ function LoginForm() {
           {state === "sending" ? "Sending link" : "Send sign in link"}
         </button>
 
+        {callbackError && state === "idle" && (
+          <p className="mt-3 text-sm text-crimson">That link did not sign you in: {callbackError}</p>
+        )}
         {state === "sent" && (
           <p className="mt-3 text-sm text-teal">Check your email. The link signs you straight in.</p>
         )}
