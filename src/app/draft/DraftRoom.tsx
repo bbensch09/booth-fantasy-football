@@ -24,6 +24,40 @@ interface Session {
 }
 
 const DEFAULT_SLOTS = { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, DEF: 1, BN: 6 };
+const SESSION_LS_PREFIX = "booth_session_";
+const PICKS_LS_PREFIX = "booth_picks_";
+
+function readStoredSession(): { sess: Session; picks: Pick[] } | null {
+  try {
+    const keys = Object.keys(localStorage).filter((k) => k.startsWith(SESSION_LS_PREFIX));
+    if (!keys.length) return null;
+    // pick the stored session with the most picks (most likely the active draft)
+    let best: { sess: Session; picks: Pick[] } | null = null;
+    for (const key of keys) {
+      const sess = JSON.parse(localStorage.getItem(key) ?? "null") as Session | null;
+      if (!sess) continue;
+      const picks = JSON.parse(localStorage.getItem(`${PICKS_LS_PREFIX}${sess.id}`) ?? "[]") as Pick[];
+      if (!best || picks.length > best.picks.length) best = { sess, picks };
+    }
+    return best;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredSession(sess: Session, picks: Pick[]) {
+  try {
+    localStorage.setItem(`${SESSION_LS_PREFIX}${sess.id}`, JSON.stringify(sess));
+    localStorage.setItem(`${PICKS_LS_PREFIX}${sess.id}`, JSON.stringify(picks));
+  } catch {}
+}
+
+function clearStoredSession(sessId: string) {
+  try {
+    localStorage.removeItem(`${SESSION_LS_PREFIX}${sessId}`);
+    localStorage.removeItem(`${PICKS_LS_PREFIX}${sessId}`);
+  } catch {}
+}
 
 export default function DraftRoom({
   userId,
@@ -45,10 +79,22 @@ export default function DraftRoom({
   const [tray, setTray] = useState<string[]>([]);
   const [verdict, setVerdict] = useState<string | null>(null);
   const [setup, setSetup] = useState({ teams: 12, rounds: 15, my_slot: 1, scoring: "half_ppr", name: "Draft" });
+  const [confirmClear, setConfirmClear] = useState(false);
 
-  // local backup so a dropped connection mid draft costs nothing
+  // On mount with no server session, restore the most recent localStorage draft.
+  // This keeps the board intact across page navigation and browser refreshes.
   useEffect(() => {
-    if (sess) localStorage.setItem(`booth_picks_${sess.id}`, JSON.stringify(picks));
+    if (sess) return;
+    const stored = readStoredSession();
+    if (stored) {
+      setSess(stored.sess);
+      setPicks(stored.picks);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Keep localStorage in sync on every pick change (backup for auth users too).
+  useEffect(() => {
+    if (sess) writeStoredSession(sess, picks);
   }, [picks, sess]);
 
   const taken = useMemo(() => new Set(picks.map((p) => p.player_id)), [picks]);
@@ -104,16 +150,34 @@ export default function DraftRoom({
         .insert({ ...setup, user_id: userId, slots: DEFAULT_SLOTS })
         .select()
         .single();
-      if (!error && data) setSess(data as Session);
+      if (!error && data) {
+        const newSess = data as Session;
+        writeStoredSession(newSess, []);
+        setSess(newSess);
+      }
     } else {
-      // Guest mode: store session in localStorage only.
       const id = crypto.randomUUID();
       const newSess: Session = { id, ...setup, slots: DEFAULT_SLOTS };
-      try {
-        localStorage.setItem(`booth_session_${id}`, JSON.stringify(newSess));
-      } catch {}
+      writeStoredSession(newSess, []);
       setSess(newSess);
     }
+  }
+
+  function newDraft() {
+    if (!sess) return;
+    clearStoredSession(sess.id);
+    // also delete from DB if signed in (best-effort, non-blocking)
+    if (userId) {
+      try {
+        const supabase = createClient();
+        supabase.from("draft_sessions").update({ status: "done" }).eq("id", sess.id);
+      } catch {}
+    }
+    setSess(null);
+    setPicks([]);
+    setTray([]);
+    setVerdict(null);
+    setConfirmClear(false);
   }
 
   async function record(playerId: string, isMine: boolean) {
@@ -219,9 +283,25 @@ export default function DraftRoom({
           <div className={onTheClockIsMe ? "font-display text-lg font-semibold text-crimson" : "text-sm text-muted"}>
             {onTheClockIsMe ? "You are on the clock" : `You are up in ${untilMe}`}
           </div>
-          <button onClick={undo} disabled={!picks.length} className="border border-rule px-3 py-1 text-sm disabled:opacity-40">
-            Undo
-          </button>
+          <div className="flex gap-2">
+            <button onClick={undo} disabled={!picks.length} className="border border-rule px-3 py-1 text-sm disabled:opacity-40">
+              Undo
+            </button>
+            {confirmClear ? (
+              <>
+                <button onClick={newDraft} className="border border-crimson px-3 py-1 text-sm text-crimson">
+                  Clear it
+                </button>
+                <button onClick={() => setConfirmClear(false)} className="border border-rule px-3 py-1 text-sm">
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <button onClick={() => setConfirmClear(true)} className="border border-rule px-3 py-1 text-sm text-muted">
+                New draft
+              </button>
+            )}
+          </div>
         </div>
 
         {cliff && (
